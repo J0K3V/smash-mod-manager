@@ -1,0 +1,4 @@
+# Smash Mod Manager v4 — Python dependencies
+# Core: only stdlib + tkinter (included with Python on Windows)
+# Optional: tkinterdnd2 for drag & drop support onto the window
+tkinterdnd2

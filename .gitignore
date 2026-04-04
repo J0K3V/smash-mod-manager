@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# PyInstaller output
+build/dist/
+build/work/
+
+# Logs
+logs/*.log
+
+# User settings (machine-specific)
+settings.json
+
+# Game data files (large, provided separately)
+dir_info_with_files_trimmed.json
+Hashes_all.txt
+
+# Claude Code local settings
+.claude/
