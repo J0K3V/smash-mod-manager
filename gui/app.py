@@ -23,6 +23,7 @@ from gui.theme import *
 from gui.widgets import (
     styled_button, styled_entry, styled_combo, styled_check,
     styled_label, styled_listbox, separator, section_header, Tooltip,
+    CheckList,
 )
 
 
@@ -350,19 +351,25 @@ class ModManagerApp:
                 settings.put("last_batch_dir", p)
         styled_button(row, "…", _browse_batch).pack(side="left")
 
-        # Results list
-        styled_label(tab, "Validation Results", anchor="w").pack(
-            fill="x", padx=20, pady=(12, 2))
+        # Results list header + select helpers
+        hdr_row = tk.Frame(tab, bg=BG)
+        hdr_row.pack(fill="x", padx=20, pady=(12, 2))
+        styled_label(hdr_row, "Validation Results", anchor="w").pack(
+            side="left", fill="x", expand=True)
+        styled_button(hdr_row, "All", lambda: self._batch_checklist.select_all(True),
+                      small=True).pack(side="left", padx=(0, 4))
+        styled_button(hdr_row, "None", lambda: self._batch_checklist.select_all(False),
+                      small=True).pack(side="left")
 
-        list_container, self.batch_listbox = styled_listbox(tab)
-        list_container.pack(fill="both", expand=True, padx=20, pady=(0, 8))
+        self._batch_checklist = CheckList(tab)
+        self._batch_checklist.frame.pack(fill="both", expand=True, padx=20, pady=(0, 8))
 
         # Actions
         btn_row = tk.Frame(tab, bg=BG)
         btn_row.pack(fill="x", padx=20, pady=(0, 12))
         styled_button(btn_row, "🔍  Validate", self._run_batch_validate,
                        width=16).pack(side="left", padx=(0, 10))
-        styled_button(btn_row, "🔧  Fix All", self._run_batch_fix,
+        styled_button(btn_row, "🔧  Fix Selected", self._run_batch_fix,
                        accent=True, width=16).pack(side="left")
 
     # ═════════════════════════════════════════════════════════════════════════
@@ -1238,61 +1245,60 @@ class ModManagerApp:
         if not folder or not os.path.isdir(folder):
             messagebox.showerror("Error", "Select a valid mods folder first.")
             return
-        self.batch_listbox.delete(0, "end")
+        self._batch_checklist.clear()
         logger.info(f"Validating mods in: {folder}")
 
         def _work():
             from core import batch_validator
 
             def _progress(current, total, name):
-                def _u():
-                    self.batch_listbox.insert("end", f"  Scanning {current}/{total}: {name}...")
-                    self.batch_listbox.see("end")
-                self.root.after(0, _u)
+                self.root.after(0, lambda c=current, t=total, n=name: None)
 
             results = batch_validator.validate_batch(folder, _progress)
 
             def _update():
-                self.batch_listbox.delete(0, "end")
+                self._batch_checklist.clear()
                 for r in results:
-                    self.batch_listbox.insert("end", f"  {r.summary()}")
-                    if r.status == batch_validator.ValidationResult.STATUS_OK:
-                        self.batch_listbox.itemconfig("end", fg=GREEN)
-                    elif r.status == batch_validator.ValidationResult.STATUS_WARN:
-                        self.batch_listbox.itemconfig("end", fg=ORANGE)
-                    else:
-                        self.batch_listbox.itemconfig("end", fg=RED)
+                    self._batch_checklist.add_item(r)
             self.root.after(0, _update)
 
         threading.Thread(target=_work, daemon=True).start()
 
     def _run_batch_fix(self):
-        folder = self.batch_path_var.get()
-        if not folder or not os.path.isdir(folder):
-            messagebox.showerror("Error", "Select a valid mods folder first.")
+        checked = self._batch_checklist.get_checked()
+        if not checked:
+            messagebox.showinfo("Nothing selected",
+                "Check at least one fixable mod in the list first.")
             return
 
         if not messagebox.askyesno(
             "Confirm",
-            "This will auto-rename slot folders for mods with mismatches.\n"
-            "Run Validate first to review issues.\n\nProceed?"):
+            f"Fix {len(checked)} selected mod(s)?\n\n"
+            "• Single-slot mismatch → slot folder renamed in-place.\n"
+            "• Multi-slot mod → each slot reslotted into its own output folder "
+            "(requires Hashes file).\n\nProceed?"):
             return
 
-        logger.info("Starting batch fix...")
+        hsh = self.hashes_var.get()
+        logger.info(f"Batch fix: {len(checked)} mod(s) selected…")
 
         def _work():
             from core import batch_validator
-            results = batch_validator.validate_batch(folder)
-            fixed = 0
+            import core.reslotter as reslotter
 
-            for r in results:
+            fixed = 0
+            for _var, r in checked:
                 if not r.can_fix or not r.fighter:
                     continue
 
-                # Try to determine what the fix should be
                 folder_slot_match = re.search(r'c\d{2,3}', r.mod_name)
-                if folder_slot_match and r.slots:
-                    expected = folder_slot_match.group()
+                if not folder_slot_match or not r.slots:
+                    continue
+
+                expected = folder_slot_match.group()  # slot from folder title
+
+                # ── Case 1: single model slot → rename in-place ───────────────
+                if len(r.slots) == 1:
                     actual = r.slots[0]
                     if expected != actual:
                         ok = batch_validator.fix_slot_mismatch(
@@ -1301,8 +1307,53 @@ class ModManagerApp:
                             fixed += 1
                             logger.success(f"  Fixed {r.mod_name}: {actual} → {expected}")
 
-            logger.success(f"Batch fix done: {fixed} mods fixed")
-            # Re-validate to show updated results
+                # ── Case 2: multiple model slots → reslot each as its own alt ─
+                else:
+                    if not hsh or not os.path.isfile(hsh):
+                        logger.warn(
+                            f"  Skipping {r.mod_name} (multi-slot): "
+                            "Hashes file not set — cannot run reslotter.")
+                        continue
+
+                    dir_info = self._find_dir_info()
+                    if not dir_info:
+                        logger.warn(
+                            f"  Skipping {r.mod_name} (multi-slot): "
+                            "dir_info_with_files_trimmed.json not found.")
+                        continue
+
+                    expected_num = fighter_db.slot_num(expected)
+                    first_num    = fighter_db.slot_num(r.slots[0])
+                    parent_dir   = os.path.dirname(r.mod_path)
+                    aegis        = settings.get("special_cases", True)
+                    fighters     = [r.fighter]
+                    if aegis and r.fighter in self._COMBINED_FIGHTERS:
+                        fighters = self._COMBINED_FIGHTERS[r.fighter]
+
+                    orig_dir = os.getcwd()
+                    try:
+                        os.chdir(os.path.dirname(dir_info))
+                        for src_s in r.slots:
+                            offset  = fighter_db.slot_num(src_s) - first_num
+                            tgt_s   = fighter_db.slot_str(expected_num + offset)
+                            out_dir = os.path.join(parent_dir,
+                                                   f"{r.mod_name} ({tgt_s})")
+                            logger.info(f"  {r.mod_name}: {src_s} → {tgt_s}")
+                            reslotter.init(hsh, r.mod_path, True)
+                            for fighter in fighters:
+                                reslotter.main(r.mod_path, hsh, fighter,
+                                               src_s, tgt_s, tgt_s, out_dir)
+                            cfg_path = os.path.join(out_dir, "config.json")
+                            with open(cfg_path, "w", encoding="utf-8") as f:
+                                json.dump(reslotter.resulting_config, f, indent=4)
+                            logger.success(f"    → {out_dir}")
+                        fixed += 1
+                    except Exception as e:
+                        logger.error(f"  Reslot error for {r.mod_name}: {e}")
+                    finally:
+                        os.chdir(orig_dir)
+
+            logger.success(f"Batch fix done: {fixed} mod(s) processed.")
             self.root.after(200, self._run_batch_validate)
 
         threading.Thread(target=_work, daemon=True).start()

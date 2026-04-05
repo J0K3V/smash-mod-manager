@@ -5,15 +5,18 @@
 import os
 ROOT = os.path.abspath(os.path.join(os.path.dirname(SPEC), ".."))
 
+# Only bundle data files if they exist next to the project root
+_datas = []
+for _fname in ("dir_info_with_files_trimmed.json", "Hashes_all.txt"):
+    _full = os.path.join(ROOT, _fname)
+    if os.path.isfile(_full):
+        _datas.append((_full, "."))
+
 a = Analysis(
     [os.path.join(ROOT, "main.py")],
     pathex=[ROOT],
     binaries=[],
-    datas=[
-        # Bundle the large data files inside the exe
-        (os.path.join(ROOT, "dir_info_with_files_trimmed.json"), "."),
-        (os.path.join(ROOT, "Hashes_all.txt"),                  "."),
-    ],
+    datas=_datas,
     hiddenimports=[
         "core.reslotter",
         "core.mod_analyzer",
