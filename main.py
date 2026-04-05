@@ -38,6 +38,20 @@ def main():
 
     from gui.app import ModManagerApp
     app = ModManagerApp(root, initial_path=initial_path)
+
+    # Window icon — works both from source and PyInstaller onefile bundle
+    _icon = os.path.join(_ROOT, "assets", "icon.ico")
+    if not os.path.isfile(_icon):
+        try:
+            _icon = os.path.join(sys._MEIPASS, "assets", "icon.ico")
+        except AttributeError:
+            _icon = ""
+    if _icon and os.path.isfile(_icon):
+        try:
+            root.iconbitmap(_icon)
+        except Exception:
+            pass
+
     root.mainloop()
 
 

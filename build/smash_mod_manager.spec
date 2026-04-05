@@ -12,6 +12,11 @@ for _fname in ("dir_info_with_files_trimmed.json", "Hashes_all.txt"):
     if os.path.isfile(_full):
         _datas.append((_full, "."))
 
+# Bundle assets folder (icon, etc.)
+_assets = os.path.join(ROOT, "assets")
+if os.path.isdir(_assets):
+    _datas.append((_assets, "assets"))
+
 a = Analysis(
     [os.path.join(ROOT, "main.py")],
     pathex=[ROOT],
@@ -40,6 +45,8 @@ a = Analysis(
 
 pyz = PYZ(a.pure)
 
+_icon = os.path.join(ROOT, "assets", "icon.ico")
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -53,4 +60,5 @@ exe = EXE(
     upx=True,
     console=False,          # no black console window
     onefile=True,
+    icon=_icon if os.path.isfile(_icon) else None,
 )

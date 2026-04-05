@@ -65,10 +65,10 @@ def validate_mod(mod_path: str) -> ValidationResult:
     r.fighter = analysis["fighter"]
     r.slots = analysis["slots"]
 
-    # Check if the mod folder name implies a specific slot
-    folder_slot_match = re.search(r'c\d{2,3}', mod_name)
+    # Check if the mod folder name implies a specific slot (case-insensitive)
+    folder_slot_match = re.search(r'c\d{2,3}', mod_name, re.IGNORECASE)
     if folder_slot_match and analysis["slots"]:
-        expected_slot = folder_slot_match.group()
+        expected_slot = folder_slot_match.group().lower()
         # Check that the mod actually contains that slot
         if expected_slot not in analysis["slots"]:
             r.add_issue(
@@ -140,6 +140,26 @@ def validate_batch(mods_folder: str,
     logger.success(f"Batch done: {ok} OK, {warns} warnings, {errors} errors out of {total}")
 
     return results
+
+
+def fix_folder_name(mod_path: str, internal_slot: str) -> str | None:
+    """
+    Rename the cXX token in the mod FOLDER NAME to match the internal slot.
+    Returns the new folder path on success, None if no change was made.
+    """
+    parent = os.path.dirname(mod_path)
+    name   = os.path.basename(mod_path)
+    new_name = re.sub(r'c\d{2,3}', internal_slot, name, count=1, flags=re.IGNORECASE)
+    if new_name == name:
+        return None
+    new_path = os.path.join(parent, new_name)
+    try:
+        os.rename(mod_path, new_path)
+        logger.info(f"  Renamed folder: {name} → {new_name}")
+        return new_path
+    except Exception as e:
+        logger.error(f"Folder rename failed: {e}")
+        return None
 
 
 def fix_slot_mismatch(mod_path: str, fighter_name: str,
