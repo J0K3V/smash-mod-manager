@@ -19,3 +19,6 @@ Hashes_all.txt
 
 # Claude Code local settings
 .claude/
+
+# Plugins (local development)
+plugins/prcxml_manager.py
