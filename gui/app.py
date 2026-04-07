@@ -716,6 +716,12 @@ class ModManagerApp:
         list_container, self.plugin_listbox = styled_listbox(tab)
         list_container.pack(fill="both", expand=True, padx=20, pady=(0, 8))
 
+        # Plugin actions section
+        separator(tab).pack(fill="x", padx=20, pady=8)
+        section_header(tab, "PLUGIN ACTIONS").pack(fill="x", **pad)
+        self.plugin_actions_frame = tk.Frame(tab, bg=BG)
+        self.plugin_actions_frame.pack(fill="x", padx=20, pady=(0, 8))
+
         btn_row = tk.Frame(tab, bg=BG)
         btn_row.pack(fill="x", padx=20, pady=(0, 12))
         styled_button(btn_row, "🔄  Reload Plugins", self._reload_plugins,
@@ -1320,7 +1326,7 @@ class ModManagerApp:
                 if not r.can_fix or not r.fighter:
                     continue
 
-                folder_slot_match = re.search(r'c\d{2,3}', r.mod_name, re.IGNORECASE)
+                folder_slot_match = re.search(r'c(?:\d{2,3}|[xX]{2})', r.mod_name, re.IGNORECASE)
                 if not folder_slot_match or not r.slots:
                     continue
 
@@ -1899,6 +1905,40 @@ class ModManagerApp:
         except Exception:
             self.plugin_listbox.insert("end", "  Plugin system not available.")
             self.plugin_listbox.itemconfig("end", fg=TEXT_DIM)
+
+        # Clear and rebuild plugin action buttons
+        if hasattr(self, "plugin_actions_frame"):
+            for w in self.plugin_actions_frame.winfo_children():
+                w.destroy()
+
+            try:
+                from core import plugin_loader
+                plugins = plugin_loader.get_loaded_plugins()
+                button_row = tk.Frame(self.plugin_actions_frame, bg=BG)
+                button_row.pack(fill="x")
+                added_buttons = False
+
+                for p in plugins:
+                    # Check for show_dialog or show_<name>_dialog function
+                    dialog_func = None
+                    for attr_name in ["show_dialog", "show_prcxml_dialog", f"show_{p.name.lower().replace(' ', '_')}_dialog"]:
+                        if hasattr(p.module, attr_name):
+                            dialog_func = getattr(p.module, attr_name)
+                            break
+
+                    if dialog_func:
+                        styled_button(
+                            button_row,
+                            f"🔧  {p.name}",
+                            command=dialog_func,
+                            small=True
+                        ).pack(side="left", padx=5, pady=2)
+                        added_buttons = True
+
+                if not added_buttons:
+                    styled_label(self.plugin_actions_frame, "(No plugin actions available)", fg=TEXT_DIM).pack()
+            except Exception as e:
+                styled_label(self.plugin_actions_frame, f"Error loading plugin actions: {e}", fg=TEXT_DIM).pack()
 
     def _reload_plugins(self):
         try:

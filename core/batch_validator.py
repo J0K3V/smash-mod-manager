@@ -66,7 +66,7 @@ def validate_mod(mod_path: str) -> ValidationResult:
     r.slots = analysis["slots"]
 
     # Check if the mod folder name implies a specific slot (case-insensitive)
-    folder_slot_match = re.search(r'c\d{2,3}', mod_name, re.IGNORECASE)
+    folder_slot_match = re.search(r'c(?:\d{2,3}|[xX]{2})', mod_name, re.IGNORECASE)
     if folder_slot_match and analysis["slots"]:
         expected_slot = folder_slot_match.group().lower()
         # Check that the mod actually contains that slot
@@ -149,7 +149,7 @@ def fix_folder_name(mod_path: str, internal_slot: str) -> str | None:
     """
     parent = os.path.dirname(mod_path)
     name   = os.path.basename(mod_path)
-    new_name = re.sub(r'c\d{2,3}', internal_slot, name, count=1, flags=re.IGNORECASE)
+    new_name = re.sub(r'c(?:\d{2,3}|[xX]{2})', internal_slot, name, count=1, flags=re.IGNORECASE)
     if new_name == name:
         return None
     new_path = os.path.join(parent, new_name)
