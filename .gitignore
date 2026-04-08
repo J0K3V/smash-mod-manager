@@ -4,8 +4,11 @@ __pycache__/
 *.pyo
 
 # PyInstaller output
-build/dist/
-build/work/
+build/
+dist/
+
+# Release artifacts (generated locally)
+release/
 
 # Logs
 logs/*.log
@@ -20,5 +23,8 @@ Hashes_all.txt
 # Claude Code local settings
 .claude/
 
-# Plugins (local development)
+# Test / scratch files
+test_*.py
+
+# Plugins excluded from repo (local development only)
 plugins/prcxml_manager.py

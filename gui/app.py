@@ -18,6 +18,7 @@ import core.logger as logger
 import core.settings as settings
 import core.mod_analyzer as analyzer
 import core.fighter_db as fighter_db
+import core.special_cases as special_cases
 
 from gui.theme import *
 from gui.widgets import (
@@ -1049,19 +1050,6 @@ class ModManagerApp:
         if copied:
             logger.info(f"Kept: {', '.join(copied)}")
 
-    # Combined-fighter groups for Aegis / Pokemon Trainer mode
-    _COMBINED_FIGHTERS = {
-        "eflame":       ["eflame", "elight", "element"],
-        "elight":       ["eflame", "elight", "element"],
-        "element":      ["eflame", "elight", "element"],
-        "popo":         ["popo", "nana"],
-        "nana":         ["popo", "nana"],
-        "ptrainer":     ["ptrainer", "pzenigame", "pfushigisou", "plizardon"],
-        "pzenigame":    ["ptrainer", "pzenigame", "pfushigisou", "plizardon"],
-        "pfushigisou":  ["ptrainer", "pzenigame", "pfushigisou", "plizardon"],
-        "plizardon":    ["ptrainer", "pzenigame", "pfushigisou", "plizardon"],
-    }
-
     def _run_reslot(self):
         if not self._validate_reslot():
             return
@@ -1071,9 +1059,7 @@ class ModManagerApp:
         new_cfg = self.new_config_var.get()
         aegis   = settings.get("special_cases", True)
 
-        fighters = [name]
-        if aegis and name in self._COMBINED_FIGHTERS:
-            fighters = self._COMBINED_FIGHTERS[name]
+        fighters = special_cases.expand_fighter_group(name, aegis)
 
         # ── Reslot All mode ───────────────────────────────────────────────────
         if (self.reslot_all_var.get()
@@ -1374,9 +1360,7 @@ class ModManagerApp:
                     first_num  = fighter_db.slot_num(r.slots[0])
                     parent_dir = os.path.dirname(r.mod_path)
                     aegis      = settings.get("special_cases", True)
-                    fighters   = [r.fighter]
-                    if aegis and r.fighter in self._COMBINED_FIGHTERS:
-                        fighters = self._COMBINED_FIGHTERS[r.fighter]
+                    fighters = special_cases.expand_fighter_group(r.fighter, aegis)
 
                     orig_dir = os.getcwd()
                     try:
@@ -1453,10 +1437,7 @@ class ModManagerApp:
 
             use_index = _bi.is_loaded()
 
-            # Build list of fighters to check (Aegis special case)
-            fighters_to_check = [name]
-            if special and name in ("eflame", "elight", "element"):
-                fighters_to_check = ["eflame", "elight", "element"]
+            fighters_to_check = special_cases.expand_fighter_group(name, special)
 
             all_results = []
             for f_name in fighters_to_check:
@@ -1513,9 +1494,7 @@ class ModManagerApp:
 
             use_index = _bi.is_loaded()
 
-            fighters_to_copy = [name]
-            if special and name in ("eflame", "elight", "element"):
-                fighters_to_copy = ["eflame", "elight", "element"]
+            fighters_to_copy = special_cases.expand_fighter_group(name, special)
 
             total_copied = 0
             total_skipped = 0
